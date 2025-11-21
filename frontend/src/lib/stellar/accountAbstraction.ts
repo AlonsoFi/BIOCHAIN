@@ -16,6 +16,7 @@
 // import { StellarSocialSDK } from 'stellar-social-sdk'
 
 import { Keypair, Networks } from '@stellar/stellar-sdk'
+import { WalletError, WalletErrorType, createWalletError } from './walletErrors'
 
 export interface AuthResult {
   publicKey: string
@@ -64,34 +65,68 @@ export const initAccountAbstraction = () => {
  * Si no está configurado, usa mock para desarrollo
  */
 export const loginWithGoogle = async (): Promise<AuthResult> => {
-  const sdk = initAccountAbstraction()
+  try {
+    const sdk = initAccountAbstraction()
 
-  // Si SDK está disponible, usar autenticación real
-  if (sdk) {
-    // Descomentar cuando SDK esté instalado:
-    // try {
-    //   const result = await sdk.authenticateWithGoogle()
-    //   return {
-    //     publicKey: result.publicKey,
-    //     account: result.account,
-    //     walletAddress: result.publicKey,
-    //   }
-    // } catch (error) {
-    //   console.error('Error authenticating with Google:', error)
-    //   throw error
-    // }
-  }
+    // Si SDK está disponible, usar autenticación real
+    if (sdk) {
+      // Descomentar cuando SDK esté instalado:
+      // try {
+      //   const result = await sdk.authenticateWithGoogle()
+      //   
+      //   // Validar resultado
+      //   if (!result?.publicKey) {
+      //     throw new WalletError(
+      //       WalletErrorType.AUTH_FAILED,
+      //       'La autenticación no devolvió una wallet válida'
+      //     )
+      //   }
+      //   
+      //   return {
+      //     publicKey: result.publicKey,
+      //     account: result.account,
+      //     walletAddress: result.publicKey,
+      //   }
+      // } catch (error) {
+      //   throw createWalletError(error, WalletErrorType.AUTH_FAILED)
+      // }
+    }
 
-  // Mock para desarrollo (cuando SDK no está configurado)
-  console.warn('Using mock authentication - configure VITE_CONTRACT_ID and VITE_GOOGLE_CLIENT_ID for real auth')
-  const keypair = Keypair.random()
-  return {
-    publicKey: keypair.publicKey(),
-    account: {
-      getBalance: async () => [{ asset: 'XLM', amount: '0' }],
-      sendPayment: async () => 'mock_tx_hash',
-    },
-    walletAddress: keypair.publicKey(),
+    // Mock para desarrollo (cuando SDK no está configurado)
+    console.warn('Using mock authentication - configure VITE_CONTRACT_ID and VITE_GOOGLE_CLIENT_ID for real auth')
+    
+    // Validar que podemos generar una wallet
+    let keypair: Keypair
+    try {
+      keypair = Keypair.random()
+    } catch (error) {
+      throw new WalletError(
+        WalletErrorType.WALLET_GENERATION_FAILED,
+        'No se pudo generar la wallet Stellar',
+        error instanceof Error ? error : undefined
+      )
+    }
+
+    // Validar que la wallet generada es válida
+    const publicKey = keypair.publicKey()
+    if (!publicKey || publicKey.length < 56) {
+      throw new WalletError(
+        WalletErrorType.WALLET_INVALID,
+        'La wallet generada no es válida'
+      )
+    }
+
+    return {
+      publicKey,
+      account: {
+        getBalance: async () => [{ asset: 'XLM', amount: '0' }],
+        sendPayment: async () => 'mock_tx_hash',
+      },
+      walletAddress: publicKey,
+    }
+  } catch (error) {
+    // Convertir cualquier error a WalletError
+    throw createWalletError(error, WalletErrorType.UNKNOWN_ERROR)
   }
 }
 
