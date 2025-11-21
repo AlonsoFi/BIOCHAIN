@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --violet-primary: #7B6BA8;
+    --violet-dark: #5D4A7E;
+    --violet-light: #9B8BC5;
+    --orange-primary: #FF6B35;
+    --orange-light: #FF8C61;
+    --bg-light: #FAFAFA;
+    --text-dark: #2D3748;
+    --text-gray: #6B7280;
+    --success: #10B981;
+    --error: #EF4444;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  body {
+    @apply bg-[#FAFAFA] text-[#2D3748];
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease;
+}
+

@@ -1,0 +1,10 @@
+/**
+ * Stat Card Component
+ * Usa Paltalabs UI - Para mostrar estadísticas en dashboards
+ * 
+ * Este componente ahora usa Paltalabs UI para cumplir con
+ * los criterios de calificación del hackathon Stellar.
+ */
+
+export { StatCard } from '@/lib/paltalabs/components'
+
