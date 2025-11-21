@@ -1,5 +1,6 @@
 import express from 'express'
 import { WalletAddressSchema, validateHeader } from '../utils/validation.js'
+import { getUserStudies, saveUserStudy } from '../services/studies.service.js'
 import logger from '../utils/logger.js'
 
 const router = express.Router()
@@ -19,36 +20,8 @@ router.get('/', (req, res) => {
       walletAddress: walletAddress.substring(0, 8) + '...',
     })
 
-    // Mock data para demo
-    const studies = [
-      {
-        id: 'study_1',
-        name: 'Análisis hormonal completo',
-        date: '2025-01-15',
-        type: 'Hemograma + perfil hormonal',
-        sales: 2,
-        earnings: 240,
-        datasetHash: 'abc123...',
-      },
-      {
-        id: 'study_2',
-        name: 'Hemograma completo',
-        date: '2024-12-10',
-        type: 'Hemograma básico',
-        sales: 1,
-        earnings: 120,
-        datasetHash: 'def456...',
-      },
-      {
-        id: 'study_3',
-        name: 'Perfil tiroideo',
-        date: '2024-11-05',
-        type: 'TSH, T3, T4',
-        sales: 0,
-        earnings: 0,
-        datasetHash: 'ghi789...',
-      },
-    ]
+    // Obtener estudios reales del usuario
+    const studies = getUserStudies(walletAddress)
 
     logger.info('Studies fetched', {
       walletAddress: walletAddress.substring(0, 8) + '...',
@@ -61,6 +34,56 @@ router.get('/', (req, res) => {
       return res.status(400).json({ error: 'Validation error', details: error.errors })
     }
     logger.error('Error getting studies', {
+      error: error.message,
+      stack: error.stack,
+    })
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+/**
+ * POST /api/studies
+ * Guarda un estudio del usuario después del upload
+ */
+router.post('/', (req, res) => {
+  try {
+    // Validar wallet address
+    const walletAddress = validateHeader(WalletAddressSchema)(
+      req.headers['x-wallet-address'] as string
+    )
+
+    // Validar body
+    const { name, type, datasetHash, txHash } = req.body
+
+    if (!name || !type || !datasetHash) {
+      return res.status(400).json({ error: 'Missing required fields: name, type, datasetHash' })
+    }
+
+    logger.info('Saving user study', {
+      walletAddress: walletAddress.substring(0, 8) + '...',
+      name,
+      datasetHash: datasetHash.substring(0, 16) + '...',
+    })
+
+    const study = saveUserStudy(walletAddress, {
+      name,
+      type,
+      datasetHash,
+      txHash,
+    })
+
+    logger.info('Study saved', {
+      walletAddress: walletAddress.substring(0, 8) + '...',
+      studyId: study.id,
+    })
+
+    res.json(study)
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      logger.warn('Validation error', { errors: error.errors })
+      return res.status(400).json({ error: 'Validation error', details: error.errors })
+    }
+    logger.error('Error saving study', {
       error: error.message,
       stack: error.stack,
     })

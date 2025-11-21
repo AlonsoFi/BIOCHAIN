@@ -84,7 +84,17 @@ export default function Marketplace() {
               placeholder="Ej: Necesito datos de mujeres 25-35 años usando anticonceptivos hormonales..."
               className="w-full px-6 py-5 pr-20 border-2 border-[#FAFAFA] rounded-2xl text-lg bg-[#FAFAFA] focus:outline-none focus:border-[#7B6BA8] focus:bg-white focus:shadow-lg transition"
             />
-            <button className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-[#7B6BA8] text-white rounded-xl hover:bg-[#5D4A7E] transition">
+            <button
+              onClick={() => {
+                if (searchQuery.trim()) {
+                  // Filtrar datasets basado en búsqueda
+                  console.log('Buscando:', searchQuery)
+                  // TODO: Implementar búsqueda real
+                  alert('Búsqueda en desarrollo. Por ahora muestra todos los datasets.')
+                }
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-[#7B6BA8] text-white rounded-xl hover:bg-[#5D4A7E] transition"
+            >
               🔍
             </button>
           </div>
@@ -105,7 +115,12 @@ export default function Marketplace() {
         {/* Marketplace Section */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-3xl font-black text-gray-900">Datasets disponibles</h2>
-          <button className="px-6 py-3 bg-white border-2 border-[#FAFAFA] rounded-xl text-gray-600 font-semibold hover:border-[#7B6BA8] hover:text-[#7B6BA8] transition">
+          <button
+            onClick={() => {
+              alert('Filtros en desarrollo. Próximamente podrás filtrar por precio, fecha, condición médica, etc.')
+            }}
+            className="px-6 py-3 bg-white border-2 border-[#FAFAFA] rounded-xl text-gray-600 font-semibold hover:border-[#7B6BA8] hover:text-[#7B6BA8] transition"
+          >
             🔽 Filtros
           </button>
         </div>

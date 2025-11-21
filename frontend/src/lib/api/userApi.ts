@@ -32,9 +32,19 @@ export const saveHistoriaClinica = async (historia: HistoriaClinica) => {
 
 /**
  * Obtiene historia clínica del usuario
+ * Retorna null si no existe (404 es esperado)
  */
 export const getHistoriaClinica = async () => {
-  const response = await apiClient.get('/user/history')
-  return response.data
+  try {
+    const response = await apiClient.get('/user/history')
+    return response.data
+  } catch (error: any) {
+    // 404 es esperado cuando el usuario no tiene historia clínica
+    if (error.response?.status === 404) {
+      return null
+    }
+    // Re-lanzar otros errores
+    throw error
+  }
 }
 

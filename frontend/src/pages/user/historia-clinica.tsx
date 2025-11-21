@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { saveHistoriaClinica } from '@/lib/api/userApi'
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Home } from 'lucide-react'
 import ProgressSteps from '@/components/ui/ProgressSteps'
 
 type Step = 1 | 2 | 3 | 4
@@ -81,11 +81,92 @@ export default function HistoriaClinica() {
 
   const handleSubmit = async () => {
     try {
-      await saveHistoriaClinica(formData as any)
+      // Validar que el consentimiento esté firmado
+      if (!formData.consentimiento.firmado) {
+        alert('Debes aceptar el consentimiento informado para continuar.')
+        return
+      }
+
+      // Transformar datos del frontend al formato del backend
+      const añoNacimiento = parseInt(formData.datosBasicos.añoNacimiento)
+      const añoActual = new Date().getFullYear()
+      const edad = añoActual - añoNacimiento
+
+      // Mapear sexo biológico a formato del backend
+      // El backend espera: 'masculino' | 'femenino' | 'otro'
+      const sexoMap: Record<string, 'masculino' | 'femenino' | 'otro'> = {
+        'masculino': 'masculino',
+        'femenino': 'femenino',
+        'intersex': 'otro',
+        'no-decir': 'otro',
+      }
+      const sexo = sexoMap[formData.datosBasicos.sexoBiologico] || 'otro'
+
+      // Validar campos requeridos
+      if (!añoNacimiento || isNaN(añoNacimiento)) {
+        alert('Por favor, selecciona tu año de nacimiento.')
+        return
+      }
+      if (!formData.datosBasicos.sexoBiologico) {
+        alert('Por favor, selecciona tu sexo biológico.')
+        return
+      }
+      if (!formData.datosBasicos.pais) {
+        alert('Por favor, selecciona tu país.')
+        return
+      }
+      if (!formData.datosBasicos.ciudad) {
+        alert('Por favor, ingresa tu ciudad.')
+        return
+      }
+
+      // Convertir usaAnticonceptivos de string a boolean
+      // El frontend tiene: 'uso-actual' | 'uso-pasado' | 'nunca'
+      // El backend espera: boolean (true si usa o usó, false si nunca)
+      const usaAnticonceptivos = formData.saludReproductiva.usaAnticonceptivos !== 'nunca' && formData.saludReproductiva.usaAnticonceptivos !== ''
+
+      // Combinar todas las condiciones médicas en un array
+      const todasCondiciones = [
+        ...formData.condicionesMedicas.ginecologicas,
+        ...formData.condicionesMedicas.metabolicas,
+        ...formData.condicionesMedicas.otras,
+      ]
+
+      // Formatear medicación actual como array
+      const medicacionArray = formData.condicionesMedicas.medicacionActual
+        ? formData.condicionesMedicas.medicacionActual.split(',').map(m => m.trim()).filter(m => m)
+        : []
+
+      // Construir tiempo de uso de anticonceptivos
+      const tiempoUso = formData.saludReproductiva.tiempoUsoAños > 0 || formData.saludReproductiva.tiempoUsoMeses > 0
+        ? `${formData.saludReproductiva.tiempoUsoAños} años, ${formData.saludReproductiva.tiempoUsoMeses} meses`
+        : ''
+
+      // Datos en formato del backend
+      const datosParaBackend = {
+        añoNacimiento,
+        sexo,
+        país: formData.datosBasicos.pais,
+        ciudad: formData.datosBasicos.ciudad,
+        etnia: formData.datosBasicos.etnia || undefined,
+        usaAnticonceptivos,
+        tipoAnticonceptivo: formData.saludReproductiva.tipoAnticonceptivo || undefined,
+        marcaAnticonceptivo: formData.saludReproductiva.marca || undefined,
+        tiempoUsoAnticonceptivo: tiempoUso || undefined,
+        condicionesMedicas: todasCondiciones.length > 0 ? todasCondiciones : undefined,
+        medicacionActual: medicacionArray.length > 0 ? medicacionArray : undefined,
+        consentimiento: {
+          firmado: formData.consentimiento.firmado,
+          fecha: formData.consentimiento.fecha || new Date().toISOString(),
+        },
+      }
+
+      await saveHistoriaClinica(datosParaBackend as any)
       navigate('/user/dashboard')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error guardando historia clínica:', error)
-      alert('Error al guardar. Intenta de nuevo.')
+      const errorMessage = error.response?.data?.error || error.message || 'Error al guardar. Intenta de nuevo.'
+      alert(`Error: ${errorMessage}`)
     }
   }
 
@@ -109,10 +190,28 @@ export default function HistoriaClinica() {
     <div className="min-h-screen bg-[#FAFAFA]">
       {/* Header */}
       <header className="bg-white shadow-sm px-12 py-6 flex justify-between items-center">
-        <div className="text-2xl font-black text-[#7B6BA8]">BioChain</div>
-        <div className="flex items-center gap-3 px-5 py-3 bg-[#FAFAFA] rounded-full">
-          <div className="w-9 h-9 bg-[#FF6B35] rounded-full flex items-center justify-center text-lg">👤</div>
-          <span className="text-sm text-gray-600">usuario@email.com</span>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/user/dashboard"
+            className="text-gray-600 hover:text-stellar-primary transition flex items-center gap-2"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Volver</span>
+          </Link>
+          <div className="text-2xl font-black text-[#7B6BA8]">BioChain</div>
+        </div>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/"
+            className="text-gray-600 hover:text-stellar-primary transition flex items-center gap-2"
+          >
+            <Home className="w-5 h-5" />
+            <span>Inicio</span>
+          </Link>
+          <div className="flex items-center gap-3 px-5 py-3 bg-[#FAFAFA] rounded-full">
+            <div className="w-9 h-9 bg-[#FF6B35] rounded-full flex items-center justify-center text-lg">👤</div>
+            <span className="text-sm text-gray-600">usuario@email.com</span>
+          </div>
         </div>
       </header>
 
@@ -508,7 +607,11 @@ export default function HistoriaClinica() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        consentimiento: { ...formData.consentimiento, firmado: e.target.checked },
+                        consentimiento: { 
+                          ...formData.consentimiento, 
+                          firmado: e.target.checked,
+                          fecha: e.target.checked ? new Date().toISOString() : '',
+                        },
                       })
                     }
                     className="w-6 h-6 mt-1 accent-[#FF6B35]"

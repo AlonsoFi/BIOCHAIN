@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { processStudyFile } from '@/lib/api/cvmApi'
 import { registerStudy } from '@/lib/stellar/sorobanClient'
+import { saveStudy } from '@/lib/api/studiesApi'
 import { encryptFile } from '@/lib/encryption/clientEncryption'
-import { Upload, FileText, CheckCircle } from 'lucide-react'
+import { Upload, FileText, CheckCircle, Home, ArrowLeft } from 'lucide-react'
 
 interface UploadedFile {
   id: string
@@ -90,6 +91,19 @@ export default function UploadStudy() {
       }
       setResult(newResult)
 
+      // Guardar estudio en backend
+      try {
+        await saveStudy({
+          name: file.name,
+          type: file.type || 'application/pdf',
+          datasetHash: cvmResult.datasetHash,
+          txHash,
+        })
+      } catch (error) {
+        console.error('Error guardando estudio:', error)
+        // No fallar el flujo si falla el guardado
+      }
+
       // Agregar a lista de archivos procesados
       setUploadedFiles((prev) => [
         ...prev,
@@ -114,6 +128,22 @@ export default function UploadStudy() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-3xl mx-auto px-4">
+        <div className="flex items-center gap-4 mb-8">
+          <Link
+            to="/user/dashboard"
+            className="text-gray-600 hover:text-stellar-primary transition flex items-center gap-2"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            <span>Volver al Dashboard</span>
+          </Link>
+          <Link
+            to="/"
+            className="text-gray-600 hover:text-stellar-primary transition flex items-center gap-2 ml-auto"
+          >
+            <Home className="w-5 h-5" />
+            <span>Inicio</span>
+          </Link>
+        </div>
         <h1 className="text-3xl font-bold mb-8">Subir Estudio Médico</h1>
 
         <div className="bg-white rounded-lg shadow-lg p-8">
@@ -188,7 +218,12 @@ export default function UploadStudy() {
                           >
                             {uploadedFile.status === 'processed' ? 'Procesado ✓' : 'Procesando...'}
                           </span>
-                          <button className="w-10 h-10 rounded-xl hover:bg-red-50 flex items-center justify-center text-xl">
+                          <button
+                            onClick={() => {
+                              setUploadedFiles((prev) => prev.filter((f) => f.id !== uploadedFile.id))
+                            }}
+                            className="w-10 h-10 rounded-xl hover:bg-red-50 flex items-center justify-center text-xl"
+                          >
                             🗑️
                           </button>
                         </div>

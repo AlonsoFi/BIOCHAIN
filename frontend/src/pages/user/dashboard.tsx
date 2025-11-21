@@ -1,17 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
+import { getHistoriaClinica } from '@/lib/api/userApi'
 import { Upload, FileText, Wallet, User, Settings, LogOut, Home } from 'lucide-react'
 import StatCard from '@/components/ui/StatCard'
 import ActionCard from '@/components/ui/ActionCard'
-import StudiesList from '@/components/user/StudiesList'
 
 type Tab = 'inicio' | 'subir' | 'estudios' | 'wallet' | 'historia' | 'config'
 
 export default function UserDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('inicio')
+  const [hasHistory, setHasHistory] = useState<boolean | null>(null)
   const { walletAddress, logout } = useAuthStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!walletAddress) {
+        setHasHistory(false)
+        return
+      }
+
+      try {
+        const history = await getHistoriaClinica()
+        setHasHistory(history !== null) // Historia clínica encontrada si no es null
+      } catch (err) {
+        console.error('Error verificando historia clínica:', err)
+        setHasHistory(false) // Error al verificar, asumir que no tiene
+      }
+    }
+
+    fetchHistory()
+  }, [walletAddress])
 
   const handleLogout = () => {
     logout()
@@ -52,7 +72,14 @@ export default function UserDashboard() {
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id as Tab)}
+              onClick={() => {
+                if (id === 'subir' && hasHistory === false) {
+                  alert('Debes completar tu Historia Clínica antes de cargar estudios.')
+                  navigate('/user/historia-clinica')
+                  return
+                }
+                setActiveTab(id as Tab)
+              }}
               className={`w-full flex items-center gap-4 px-6 py-3 mb-2 rounded-xl transition ${
                 activeTab === id
                   ? 'bg-[#7B6BA8] text-white font-semibold'
@@ -220,10 +247,20 @@ export default function UserDashboard() {
               <div className="text-base opacity-90 mb-2">Balance disponible</div>
               <div className="text-6xl font-black mb-6">${stats.balanceDisponible}</div>
               <div className="flex gap-4 justify-center">
-                <button className="px-6 py-3 bg-white/20 border-2 border-white/30 rounded-xl text-white font-bold hover:bg-white/30 transition">
+                <button
+                  onClick={() => {
+                    alert('Función de retiro en desarrollo. Próximamente podrás retirar tus ganancias a tu wallet Stellar.')
+                  }}
+                  className="px-6 py-3 bg-white/20 border-2 border-white/30 rounded-xl text-white font-bold hover:bg-white/30 transition"
+                >
                   💸 Retirar
                 </button>
-                <button className="px-6 py-3 bg-white/20 border-2 border-white/30 rounded-xl text-white font-bold hover:bg-white/30 transition">
+                <button
+                  onClick={() => {
+                    alert('Función de fondeo en desarrollo. Próximamente podrás fondear tu wallet desde aquí.')
+                  }}
+                  className="px-6 py-3 bg-white/20 border-2 border-white/30 rounded-xl text-white font-bold hover:bg-white/30 transition"
+                >
                   ➕ Fondear
                 </button>
               </div>
@@ -234,7 +271,15 @@ export default function UserDashboard() {
               <h3 className="text-base font-bold text-gray-900 mb-3">📍 Tu dirección de wallet</h3>
               <div className="flex items-center gap-4 p-4 bg-[#FAFAFA] rounded-xl">
                 <code className="flex-1 font-mono text-sm text-gray-600">{walletAddress}</code>
-                <button className="px-4 py-2 bg-[#7B6BA8] text-white rounded-lg text-sm font-semibold hover:bg-[#5D4A7E] transition">
+                <button
+                  onClick={() => {
+                    if (walletAddress) {
+                      navigator.clipboard.writeText(walletAddress)
+                      alert('Wallet address copiada al portapapeles')
+                    }
+                  }}
+                  className="px-4 py-2 bg-[#7B6BA8] text-white rounded-lg text-sm font-semibold hover:bg-[#5D4A7E] transition"
+                >
                   Copiar
                 </button>
               </div>

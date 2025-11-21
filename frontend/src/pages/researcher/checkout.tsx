@@ -210,7 +210,13 @@ export default function Checkout() {
                             <span className="text-sm text-gray-600">{item.label}</span>
                             <div className="flex items-center gap-2">
                               <code className="text-sm font-mono text-gray-900">{item.value}</code>
-                              <button className="px-3 py-1 bg-[#7B6BA8] text-white rounded-lg text-xs font-semibold hover:bg-[#5D4A7E]">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.value)
+                                  alert(`${item.label} copiado al portapapeles`)
+                                }}
+                                className="px-3 py-1 bg-[#7B6BA8] text-white rounded-lg text-xs font-semibold hover:bg-[#5D4A7E]"
+                              >
                                 Copiar
                               </button>
                             </div>
@@ -254,7 +260,13 @@ export default function Checkout() {
                             <span className="text-sm text-gray-600">{item.label}</span>
                             <div className="flex items-center gap-2">
                               <code className="text-xs font-mono text-gray-900">{item.value}</code>
-                              <button className="px-3 py-1 bg-[#7B6BA8] text-white rounded-lg text-xs font-semibold hover:bg-[#5D4A7E]">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(item.value)
+                                  alert(`${item.label} copiado al portapapeles`)
+                                }}
+                                className="px-3 py-1 bg-[#7B6BA8] text-white rounded-lg text-xs font-semibold hover:bg-[#5D4A7E]"
+                              >
                                 Copiar
                               </button>
                             </div>

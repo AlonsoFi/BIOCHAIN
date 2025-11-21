@@ -3,4 +3,9 @@ dist
 .env
 *.log
 .DS_Store
+data/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
 

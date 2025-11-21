@@ -21,9 +21,24 @@ const CONTRACT_IDS = {
 
 /**
  * Obtiene cliente RPC de Soroban
+ * Mock para desarrollo - en producción usar SDK real
  */
-export const getSorobanRpc = (): SorobanRpc.Server => {
-  return new SorobanRpc.Server(RPC_URL, { allowHttp: true })
+export const getSorobanRpc = (): any => {
+  try {
+    // Intentar usar SorobanRpc real si está disponible
+    if (SorobanRpc && SorobanRpc.Server) {
+      return new SorobanRpc.Server(RPC_URL, { allowHttp: true })
+    }
+  } catch (error) {
+    console.warn('SorobanRpc.Server no disponible, usando mock:', error)
+  }
+  
+  // Mock para desarrollo
+  return {
+    getNetwork: () => Promise.resolve({ passphrase: NETWORK }),
+    simulateTransaction: () => Promise.resolve({ result: 'mock_simulation' }),
+    sendTransaction: () => Promise.resolve({ hash: 'mock_tx_hash' }),
+  }
 }
 
 /**
@@ -34,7 +49,25 @@ export const getStudyRegistryContract = (): Contract => {
 }
 
 /**
- * Registra un estudio en el smart contract
+ * Verifica si un hash ya está registrado en blockchain (anti-duplicado on-chain)
+ * 
+ * Paso C del anti-duplicado: Verificación en Soroban contract
+ */
+export const checkHashNotRegistered = async (datasetHash: string): Promise<boolean> => {
+  try {
+    // Mock: siempre permite (en producción verificaría en blockchain)
+    // TODO: Implementar verificación real cuando el contrato esté deployado
+    console.log('Verificando hash en blockchain (mock):', datasetHash.substring(0, 16) + '...')
+    return true // Hash no está registrado, puede continuar
+  } catch (error) {
+    console.error('Error verificando hash:', error)
+    // En caso de error, asumir que no está registrado para no bloquear
+    return true
+  }
+}
+
+/**
+ * Registra un estudio en el smart contract (con verificación de duplicado)
  */
 export const registerStudy = async (
   zkProof: string,
@@ -47,31 +80,21 @@ export const registerStudy = async (
     throw new Error('No hay wallet conectada')
   }
 
-  const contract = getStudyRegistryContract()
-  const rpc = getSorobanRpc()
+  // Verificar duplicado on-chain (Paso C)
+  const hashNotRegistered = await checkHashNotRegistered(datasetHash)
+  if (!hashNotRegistered) {
+    throw new Error('Este estudio ya está registrado en blockchain (duplicado)')
+  }
 
   try {
-    // Construir parámetros
-    const args = [
-      xdr.ScVal.scvString(zkProof),
-      xdr.ScVal.scvString(attestation),
-      xdr.ScVal.scvString(datasetHash),
-      xdr.ScVal.scvI64(xdr.Int64.fromString(cycleTimestamp.toString())),
-    ]
-
-    // Simular transacción
-    const simResult = await contract.simulateTransaction(
-      contract.call('register_study', ...args),
-      { rpc, source: publicKey }
-    )
-
-    // TODO: Firmar y enviar transacción real
-    // const tx = await contract.transaction('register_study', ...args)
-    // const signedTx = await signTransaction(tx, publicKey)
-    // const result = await rpc.sendTransaction(signedTx)
-
-    // Mock para desarrollo
-    console.log('Simulando register_study:', { zkProof, attestation, datasetHash, cycleTimestamp })
+    // Mock para desarrollo - en producción usar SDK real
+    // TODO: Implementar registro real cuando el contrato esté deployado
+    console.log('Simulando register_study (mock):', { 
+      zkProof: zkProof.substring(0, 20) + '...', 
+      attestation: attestation.substring(0, 20) + '...', 
+      datasetHash: datasetHash.substring(0, 16) + '...', 
+      cycleTimestamp 
+    })
     return 'mock_tx_hash_' + Date.now()
   } catch (error) {
     console.error('Error registrando estudio:', error)
@@ -88,18 +111,10 @@ export const purchaseDataset = async (datasetId: string): Promise<string> => {
     throw new Error('No hay wallet conectada')
   }
 
-  const contract = new Contract(CONTRACT_IDS.DATASET_MARKETPLACE)
-  const rpc = getSorobanRpc()
-
   try {
-    // TODO: Implementar compra real
-    // const args = [xdr.ScVal.scvString(datasetId)]
-    // const tx = await contract.transaction('purchase_dataset', ...args)
-    // const signedTx = await signTransaction(tx, publicKey)
-    // const result = await rpc.sendTransaction(signedTx)
-
-    // Mock para desarrollo
-    console.log('Simulando purchase_dataset:', datasetId)
+    // Mock para desarrollo - en producción usar SDK real
+    // TODO: Implementar compra real cuando el contrato esté deployado
+    console.log('Simulando purchase_dataset (mock):', datasetId)
     return 'mock_tx_hash_' + Date.now()
   } catch (error) {
     console.error('Error comprando dataset:', error)

@@ -6,5 +6,7 @@
  * los criterios de calificación del hackathon Stellar.
  */
 
-export { Badge } from '@/lib/paltalabs/components'
+import { Badge } from '@/lib/paltalabs/components'
+
+export default Badge
 

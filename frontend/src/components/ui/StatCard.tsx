@@ -6,5 +6,7 @@
  * los criterios de calificación del hackathon Stellar.
  */
 
-export { StatCard } from '@/lib/paltalabs/components'
+import { StatCard } from '@/lib/paltalabs/components'
+
+export default StatCard
 

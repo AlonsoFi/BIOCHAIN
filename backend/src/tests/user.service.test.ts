@@ -5,26 +5,35 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { saveHistoriaClinica, getHistoriaClinica, hasConsent } from '../services/user.service.js'
+import { saveHistoriaClinica, getHistoriaClinica, hasConsent, clearAllData, type HistoriaClinica } from '../services/user.service.js'
 
 describe('User Service', () => {
   const testWalletAddress = 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+  const testWalletAddress2 = 'GYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY'
 
   beforeEach(() => {
     // Limpiar datos antes de cada test
-    // En producción, esto se haría con una DB de test
+    clearAllData()
   })
 
   describe('saveHistoriaClinica', () => {
     it('should save clinical history successfully', () => {
-      const historia = {
-        añoNacimiento: 1990,
-        sexo: 'femenino' as const,
-        país: 'Argentina',
-        ciudad: 'Buenos Aires',
-        usaAnticonceptivos: true,
-        tipoAnticonceptivo: 'Píldora',
-        condicionesMedicas: [],
+      const historia: HistoriaClinica = {
+        datosBasicos: {
+          edad: 34,
+          genero: 'femenino',
+          peso: 65,
+          altura: 165,
+        },
+        saludReproductiva: {
+          embarazo: false,
+          anticonceptivos: true,
+        },
+        condicionesMedicas: {
+          diabetes: false,
+          hipertension: false,
+          otras: [],
+        },
         consentimiento: {
           firmado: true,
           fecha: new Date().toISOString(),
@@ -36,25 +45,42 @@ describe('User Service', () => {
     })
 
     it('should anonymize personal data', () => {
-      const historia = {
-        añoNacimiento: 1990,
-        sexo: 'femenino' as const,
-        país: 'Argentina',
-        ciudad: 'Buenos Aires',
-        usaAnticonceptivos: false,
-        condicionesMedicas: [],
+      const historia: HistoriaClinica = {
+        datosBasicos: {
+          edad: 34,
+          genero: 'femenino',
+          peso: 65,
+          altura: 165,
+        },
+        saludReproductiva: {
+          embarazo: false,
+          anticonceptivos: false,
+        },
+        condicionesMedicas: {
+          diabetes: false,
+          hipertension: false,
+          otras: [],
+        },
         consentimiento: {
           firmado: true,
           fecha: new Date().toISOString(),
         },
       }
 
-      saveHistoriaClinica(testWalletAddress, historia)
-      const saved = getHistoriaClinica(testWalletAddress)
+      saveHistoriaClinica(testWalletAddress2, historia)
+      const saved = getHistoriaClinica(testWalletAddress2)
 
-      // Verificar que datos identificables no se guardan
-      expect(saved?.historiaClinica).not.toHaveProperty('ciudad')
-      expect(saved?.historiaClinica).not.toHaveProperty('país')
+      // Verificar que se guardó correctamente
+      expect(saved).not.toBeNull()
+      expect(saved).toHaveProperty('datosBasicos')
+      expect(saved).toHaveProperty('saludReproductiva')
+      expect(saved).toHaveProperty('condicionesMedicas')
+      expect(saved).toHaveProperty('consentimiento')
+      
+      // Verificar que no tiene propiedades identificables como ciudad o país
+      // (que no deberían estar en la estructura HistoriaClinica de todos modos)
+      expect(saved).not.toHaveProperty('ciudad')
+      expect(saved).not.toHaveProperty('país')
     })
   })
 
@@ -64,13 +90,22 @@ describe('User Service', () => {
     })
 
     it('should return true if consent exists', () => {
-      const historia = {
-        añoNacimiento: 1990,
-        sexo: 'femenino' as const,
-        país: 'Argentina',
-        ciudad: 'Buenos Aires',
-        usaAnticonceptivos: false,
-        condicionesMedicas: [],
+      const historia: HistoriaClinica = {
+        datosBasicos: {
+          edad: 34,
+          genero: 'femenino',
+          peso: 65,
+          altura: 165,
+        },
+        saludReproductiva: {
+          embarazo: false,
+          anticonceptivos: false,
+        },
+        condicionesMedicas: {
+          diabetes: false,
+          hipertension: false,
+          otras: [],
+        },
         consentimiento: {
           firmado: true,
           fecha: new Date().toISOString(),

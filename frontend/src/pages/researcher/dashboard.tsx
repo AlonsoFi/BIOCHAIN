@@ -98,7 +98,13 @@ export default function ResearcherDashboard() {
               placeholder="Ej: Necesito datos de mujeres 25-35 años usando anticonceptivos hormonales..."
               className="w-full px-6 py-5 pr-20 border-2 border-[#FAFAFA] rounded-2xl text-lg bg-[#FAFAFA] focus:outline-none focus:border-[#7B6BA8] focus:bg-white focus:shadow-lg transition"
             />
-            <button className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-[#7B6BA8] text-white rounded-xl hover:bg-[#5D4A7E] transition">
+            <button
+              onClick={() => {
+                // Navegar al marketplace con búsqueda
+                navigate('/researcher/marketplace')
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-[#7B6BA8] text-white rounded-xl hover:bg-[#5D4A7E] transition"
+            >
               🔍
             </button>
           </div>

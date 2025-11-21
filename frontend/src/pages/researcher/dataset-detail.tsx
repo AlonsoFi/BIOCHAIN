@@ -199,7 +199,13 @@ export default function DatasetDetail() {
                 Comprar acceso →
               </button>
 
-              <button className="w-full px-6 py-3 bg-[#FAFAFA] text-gray-700 rounded-xl font-semibold hover:bg-gray-100 transition border-2 border-gray-200">
+              <button
+                onClick={() => {
+                  // TODO: Implementar guardado en favoritos
+                  alert('Función de favoritos en desarrollo. Próximamente podrás guardar datasets para después.')
+                }}
+                className="w-full px-6 py-3 bg-[#FAFAFA] text-gray-700 rounded-xl font-semibold hover:bg-gray-100 transition border-2 border-gray-200"
+              >
                 ❤️ Guardar para después
               </button>
 

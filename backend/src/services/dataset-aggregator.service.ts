@@ -8,9 +8,65 @@
  * - dataset_studies: relación many-to-many
  */
 
-// Mock storage en memoria
-const datasets: Map<string, any> = new Map()
-const studyRecords: Map<string, any> = new Map()
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const DATA_DIR = path.join(__dirname, '../../data')
+const DATASETS_FILE = path.join(DATA_DIR, 'datasets.json')
+const STUDIES_FILE = path.join(DATA_DIR, 'studies.json')
+
+// Asegurar que el directorio existe
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true })
+}
+
+// Cargar datos desde archivo o crear Map vacío
+const loadData = (filePath: string): Map<string, any> => {
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+      return new Map(Object.entries(data))
+    }
+  } catch (error) {
+    console.error(`Error loading data from ${filePath}:`, error)
+  }
+  return new Map()
+}
+
+// Guardar datos a archivo
+const saveData = (data: Map<string, any>, filePath: string) => {
+  try {
+    const obj = Object.fromEntries(data)
+    fs.writeFileSync(filePath, JSON.stringify(obj, null, 2), 'utf-8')
+  } catch (error) {
+    console.error(`Error saving data to ${filePath}:`, error)
+  }
+}
+
+// Storage con persistencia en archivo
+const datasets: Map<string, any> = loadData(DATASETS_FILE)
+const studyRecords: Map<string, any> = loadData(STUDIES_FILE)
+
+// Guardar automáticamente cada 5 segundos (debounce)
+let datasetsSaveTimeout: NodeJS.Timeout | null = null
+let studiesSaveTimeout: NodeJS.Timeout | null = null
+
+const scheduleDatasetsSave = () => {
+  if (datasetsSaveTimeout) clearTimeout(datasetsSaveTimeout)
+  datasetsSaveTimeout = setTimeout(() => {
+    saveData(datasets, DATASETS_FILE)
+  }, 5000)
+}
+
+const scheduleStudiesSave = () => {
+  if (studiesSaveTimeout) clearTimeout(studiesSaveTimeout)
+  studiesSaveTimeout = setTimeout(() => {
+    saveData(studyRecords, STUDIES_FILE)
+  }, 5000)
+}
 
 export interface Dataset {
   id: string
@@ -54,6 +110,7 @@ export const createDataset = (
   }
 
   datasets.set(dataset.id, dataset)
+  scheduleDatasetsSave()
   return dataset
 }
 
@@ -89,6 +146,7 @@ export const registerStudy = (studyId: string, data: any) => {
     ...data,
     createdAt: new Date().toISOString(),
   })
+  scheduleStudiesSave()
 }
 
 /**
@@ -116,10 +174,40 @@ createDataset(
   95
 )
 
-createDataset(
-  ['study6'],
-  'Mujer, 25 años, SOP diagnosticado',
-  'Dataset de persona con Síndrome de Ovario Poliquístico',
-  150
-)
+// Guardar datos al cerrar el proceso
+process.on('SIGINT', () => {
+  saveData(datasets, DATASETS_FILE)
+  saveData(studyRecords, STUDIES_FILE)
+  process.exit(0)
+})
+
+process.on('SIGTERM', () => {
+  saveData(datasets, DATASETS_FILE)
+  saveData(studyRecords, STUDIES_FILE)
+  process.exit(0)
+})
+
+// Inicializar datos de demo solo si no existen
+if (datasets.size === 0) {
+  createDataset(
+    ['study1', 'study2', 'study3'],
+    'Mujer, 28 años, anticonceptivos 3 años',
+    'Dataset de persona fértil usando anticonceptivos hormonales',
+    120
+  )
+
+  createDataset(
+    ['study4', 'study5'],
+    'Mujer, 32 años, sin anticonceptivos',
+    'Dataset de grupo control sin uso de anticonceptivos',
+    95
+  )
+
+  createDataset(
+    ['study6'],
+    'Mujer, 25 años, SOP diagnosticado',
+    'Dataset de persona con Síndrome de Ovario Poliquístico',
+    150
+  )
+}
 
