@@ -1,8 +1,10 @@
 import express from 'express'
 import multer from 'multer'
 import { processPDF, getCVMConfig } from '../services/cvm.service.js'
-import { generateProof } from '../services/zkprover.service.js'
-import { hashExists, registerHash } from '../services/deduplication.service.js'
+import { generateZKProof } from '../services/zk-prover/index.js'
+import { registerHash } from '../services/deduplication.service.js'
+import { assertNotDuplicate } from '../services/study-duplicate.service.js'
+import { DuplicateStudyError } from '../errors/DuplicateStudyError.js'
 import logger from '../utils/logger.js'
 
 const router = express.Router()
@@ -39,7 +41,7 @@ const upload = multer({
  * - PII nunca sale del TEE
  * - Duplicados son rechazados
  */
-router.post('/process', upload.single('file'), async (req, res) => {
+router.post('/process', upload.single('file'), async (req, res, next) => {
   let pdfBuffer: Buffer | null = null
 
   try {
@@ -73,28 +75,31 @@ router.post('/process', upload.single('file'), async (req, res) => {
       fallbackUsed: cvmResult.fallbackUsed || false,
     })
 
-    // 2. Verificar duplicado (ANTI-DUPLICADO - Paso B)
-    if (hashExists(cvmResult.datasetHash)) {
-      logger.warn('Duplicate study detected', {
-        datasetHash: cvmResult.datasetHash.substring(0, 16) + '...',
-        filename: req.file.originalname,
-      })
-      
-      // Destruir buffer
-      pdfBuffer.fill(0)
-      
-      return res.status(409).json({
-        error: 'Duplicate study',
-        message: 'Este estudio ya fue procesado anteriormente',
-        datasetHash: cvmResult.datasetHash.substring(0, 16) + '...',
-      })
+    // 2. Verificar duplicado (ANTI-DUPLICADO - Paso B y C)
+    // IMPORTANTE: Esto debe ejecutarse ANTES de generar ZK proof y registrar en blockchain
+    try {
+      await assertNotDuplicate(cvmResult.datasetHash)
+    } catch (error) {
+      // Si es DuplicateStudyError, destruir buffer y retornar error
+      if (error instanceof DuplicateStudyError) {
+        pdfBuffer.fill(0)
+        throw error // Será manejado por el error handler
+      }
+      // Re-lanzar otros errores
+      throw error
     }
 
-    // 3. Generar ZK proof
-    const zkProof = await generateProof(cvmResult.datasetHash, cvmResult.attestationProof)
+    // 3. Generar ZK proof (solo si no es duplicado)
+    // IMPORTANTE: Solo pasamos dataset_hash y attestation_proof
+    // NO contributor_id, NO timestamps, NO PII, NO metadata
+    const zkProof = await generateZKProof({
+      datasetHash: cvmResult.datasetHash,
+      attestationProof: cvmResult.attestationProof,
+    })
 
     logger.info('ZK proof generated', {
       proofLength: zkProof.proof.length,
+      publicInputsCount: zkProof.publicInputs.length,
     })
 
     // 4. Registrar hash (después de verificar que no es duplicado)
@@ -104,8 +109,12 @@ router.post('/process', upload.single('file'), async (req, res) => {
     pdfBuffer.fill(0)
     pdfBuffer = null
 
+    // Retornar resultado al frontend
+    // IMPORTANTE: NO incluir PII, solo datos anonimizados
     res.json({
-      ...cvmResult,
+      datasetHash: cvmResult.datasetHash,
+      summaryMetadata: cvmResult.summaryMetadata,
+      attestationProof: cvmResult.attestationProof,
       zkProof: zkProof.proof,
       publicInputs: zkProof.publicInputs,
       duplicateCheck: 'passed',
@@ -114,6 +123,12 @@ router.post('/process', upload.single('file'), async (req, res) => {
     // Destruir buffer en caso de error
     if (pdfBuffer) {
       pdfBuffer.fill(0)
+    }
+
+    // DuplicateStudyError será manejado por el error handler middleware
+    if (error instanceof DuplicateStudyError) {
+      // Pasar al siguiente middleware (error handler)
+      return next(error)
     }
 
     // Manejar errores específicos de CVM
@@ -134,16 +149,8 @@ router.post('/process', upload.single('file'), async (req, res) => {
       }
     }
 
-    logger.error('Error processing file', {
-      error: error.message,
-      stack: error.stack,
-      code: error.code,
-    })
-
-    res.status(500).json({
-      error: 'Error processing file',
-      message: error.message || 'Error interno del servidor',
-    })
+    // Pasar otros errores al error handler
+    next(error)
   }
 })
 

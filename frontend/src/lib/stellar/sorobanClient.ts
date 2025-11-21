@@ -68,15 +68,24 @@ export const checkHashNotRegistered = async (datasetHash: string): Promise<boole
 
 /**
  * Registra un estudio en el smart contract (con verificación de duplicado)
+ * 
+ * IMPORTANTE: 
+ * - NO incluye cycleTimestamp (regla de "uno por mes" eliminada)
+ * - NO incluye contributor_id en el ZK proof
+ * - Solo verifica unicidad del dataset_hash
+ * 
+ * @param datasetHash - Hash del dataset procesado
+ * @param attestation - Attestation proof del TEE
+ * @param zkProof - Zero-Knowledge proof generada por el backend
+ * @returns Transaction hash
  */
 export const registerStudy = async (
-  zkProof: string,
-  attestation: string,
   datasetHash: string,
-  cycleTimestamp: number
+  attestation: string,
+  zkProof: string
 ): Promise<string> => {
-  const { publicKey } = useAuthStore.getState()
-  if (!publicKey) {
+  const { walletAddress, publicKey } = useAuthStore.getState()
+  if (!publicKey || !walletAddress) {
     throw new Error('No hay wallet conectada')
   }
 
@@ -90,11 +99,22 @@ export const registerStudy = async (
     // Mock para desarrollo - en producción usar SDK real
     // TODO: Implementar registro real cuando el contrato esté deployado
     console.log('Simulando register_study (mock):', { 
-      zkProof: zkProof.substring(0, 20) + '...', 
-      attestation: attestation.substring(0, 20) + '...', 
       datasetHash: datasetHash.substring(0, 16) + '...', 
-      cycleTimestamp 
+      attestation: attestation.substring(0, 20) + '...', 
+      zkProof: zkProof.substring(0, 20) + '...',
+      contributor: walletAddress.substring(0, 8) + '...',
     })
+    
+    // En producción, esto sería:
+    // const contract = getStudyRegistryContract()
+    // const tx = contract.call('register_study', {
+    //   dataset_hash: datasetHash,
+    //   attestation: attestation,
+    //   zk_proof: zkProof,
+    //   contributor: walletAddress,
+    // })
+    // return tx.hash
+    
     return 'mock_tx_hash_' + Date.now()
   } catch (error) {
     console.error('Error registrando estudio:', error)

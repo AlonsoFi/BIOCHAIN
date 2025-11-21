@@ -5,6 +5,7 @@ import userRoutes from './routes/user.routes.js'
 import cvmRoutes from './routes/cvm.routes.js'
 import datasetsRoutes from './routes/datasets.routes.js'
 import studiesRoutes from './routes/studies.routes.js'
+import { errorHandler } from './middleware/errorHandler.js'
 import logger from './utils/logger.js'
 
 dotenv.config()
@@ -37,16 +38,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  logger.error('Unhandled error', {
-    error: err.message,
-    stack: err.stack,
-    path: req.path,
-    method: req.method,
-  })
-  res.status(500).json({ error: 'Internal server error' })
-})
+// Error handling middleware (debe ir al final, después de todas las rutas)
+app.use(errorHandler)
 
 app.listen(PORT, () => {
   logger.info(`🚀 Backend running on http://localhost:${PORT}`, {

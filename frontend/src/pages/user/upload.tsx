@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { processStudyFile } from '@/lib/api/cvmApi'
 import { registerStudy } from '@/lib/stellar/sorobanClient'
 import { saveStudy } from '@/lib/api/studiesApi'
 import { encryptFile } from '@/lib/encryption/clientEncryption'
 import { Upload, FileText, CheckCircle, Home, ArrowLeft } from 'lucide-react'
+import InlineWarning from '@/components/ui/InlineWarning'
 
 interface UploadedFile {
   id: string
@@ -20,11 +21,17 @@ export default function UploadStudy() {
   const [step, setStep] = useState<'upload' | 'processing' | 'cvm' | 'zk' | 'blockchain' | 'done'>('upload')
   const [result, setResult] = useState<any>(null)
   const [dragging, setDragging] = useState(false)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  const [generalError, setGeneralError] = useState<string | null>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0])
+      // Limpiar errores al seleccionar nuevo archivo
+      setDuplicateError(null)
+      setGeneralError(null)
     }
   }
 
@@ -33,6 +40,9 @@ export default function UploadStudy() {
     setDragging(false)
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       setFile(e.dataTransfer.files[0])
+      // Limpiar errores al soltar nuevo archivo
+      setDuplicateError(null)
+      setGeneralError(null)
     }
   }
 
@@ -48,6 +58,9 @@ export default function UploadStudy() {
   const handleUpload = async () => {
     if (!file) return
 
+    // Limpiar errores previos
+    setDuplicateError(null)
+    setGeneralError(null)
     setUploading(true)
     setStep('processing')
 
@@ -73,13 +86,12 @@ export default function UploadStudy() {
       // → zkProof (zero-knowledge proof que valida sin revelar contenido)
 
       // Step 3: Registrar en blockchain (Soroban)
+      // IMPORTANTE: NO incluimos cycleTimestamp (regla eliminada)
       setStep('blockchain')
-      const cycleTimestamp = Math.floor(Date.now() / 1000)
       const txHash = await registerStudy(
-        cvmResult.zkProof, // Usar el ZK proof del backend
-        cvmResult.attestationProof,
         cvmResult.datasetHash,
-        cycleTimestamp
+        cvmResult.attestationProof,
+        cvmResult.zkProof
       )
 
       const newResult = {
@@ -116,12 +128,43 @@ export default function UploadStudy() {
       ])
 
       setStep('done')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error subiendo estudio:', error)
-      alert('Error al procesar el archivo. Intenta de nuevo.')
+      
+      // Detectar error de PDF duplicado
+      if (error?.response?.data?.code === 'DUPLICATE_PDF') {
+        const datasetHash = error?.response?.data?.datasetHash || 'N/A'
+        console.warn('Duplicate PDF detected:', datasetHash)
+        
+        setDuplicateError('Este estudio ya fue cargado anteriormente. Por favor subí un PDF diferente.')
+        setStep('upload')
+        setUploading(false)
+        
+        // Auto-scroll al error
+        setTimeout(() => {
+          errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 100)
+        
+        return
+      }
+
+      // Otros errores
+      setGeneralError(error?.response?.data?.message || 'Error al procesar el archivo. Intenta de nuevo.')
       setStep('upload')
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleResetUpload = () => {
+    setFile(null)
+    setDuplicateError(null)
+    setGeneralError(null)
+    setStep('upload')
+    // Resetear el input file
+    const fileInput = document.getElementById('file-input') as HTMLInputElement
+    if (fileInput) {
+      fileInput.value = ''
     }
   }
 
@@ -147,6 +190,28 @@ export default function UploadStudy() {
         <h1 className="text-3xl font-bold mb-8">Subir Estudio Médico</h1>
 
         <div className="bg-white rounded-lg shadow-lg p-8">
+          {/* Error Messages */}
+          <div ref={errorRef}>
+            {duplicateError && (
+              <div className="mb-6">
+                <InlineWarning message={duplicateError} />
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={handleResetUpload}
+                    className="px-6 py-2 bg-[#7B6BA8] text-white rounded-xl hover:bg-[#5D4A7E] transition font-semibold"
+                  >
+                    Subir otro PDF
+                  </button>
+                </div>
+              </div>
+            )}
+            {generalError && !duplicateError && (
+              <div className="mb-6">
+                <InlineWarning message={generalError} />
+              </div>
+            )}
+          </div>
+
           {/* Upload Step */}
           {step === 'upload' && (
             <div>
@@ -237,9 +302,14 @@ export default function UploadStudy() {
                 <div className="mt-8 pt-8 border-t border-gray-200">
                   <button
                     onClick={handleUpload}
-                    className="w-full px-6 py-4 bg-[#FF6B35] text-white rounded-xl hover:bg-[#FF8C61] transition font-bold shadow-lg"
+                    disabled={uploading || !!duplicateError}
+                    className={`w-full px-6 py-4 rounded-xl transition font-bold shadow-lg ${
+                      uploading || duplicateError
+                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                        : 'bg-[#FF6B35] text-white hover:bg-[#FF8C61]'
+                    }`}
                   >
-                    Procesar y agregar a mi dataset
+                    {uploading ? 'Procesando...' : 'Procesar y agregar a mi dataset'}
                   </button>
                 </div>
               )}
