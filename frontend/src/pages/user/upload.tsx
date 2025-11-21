@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { processStudyFile } from '@/lib/api/cvmApi'
-import { registerStudy } from '@/lib/stellar/sorobanClient'
+import { registerStudyOnChain } from '@/lib/api/sorobanApi'
 import { saveStudy } from '@/lib/api/studiesApi'
 import { encryptFile } from '@/lib/encryption/clientEncryption'
 import { Upload, FileText, CheckCircle, Home, ArrowLeft } from 'lucide-react'
@@ -88,18 +88,27 @@ export default function UploadStudy() {
       // Step 3: Registrar en blockchain (Soroban)
       // IMPORTANTE: NO incluimos cycleTimestamp (regla eliminada)
       setStep('blockchain')
-      const txHash = await registerStudy(
+      const registerResult = await registerStudyOnChain(
         cvmResult.datasetHash,
         cvmResult.attestationProof,
         cvmResult.zkProof
       )
+      const txHash = registerResult.transactionHash
+      
+      console.log('✅ Estudio registrado en blockchain:', {
+        transactionHash: txHash,
+        studyId: registerResult.studyId,
+      })
 
+      // cvmResult ya viene completo del pipeline (status, datasetHash, summaryMetadata, attestationProof, zkProof, publicInputs, contributorAddress, timestamp)
       const newResult = {
         datasetHash: cvmResult.datasetHash,
         txHash,
         metadata: cvmResult.summaryMetadata,
         zkProof: cvmResult.zkProof,
         publicInputs: cvmResult.publicInputs,
+        contributorAddress: cvmResult.contributorAddress,
+        timestamp: cvmResult.timestamp,
       }
       setResult(newResult)
 

@@ -124,21 +124,14 @@ export const registerStudy = async (
 
 /**
  * Compra un dataset en el marketplace
+ * 
+ * @deprecated Use purchaseDataset from @/lib/blockchain/datasets instead
+ * This function is kept for backward compatibility
  */
 export const purchaseDataset = async (datasetId: string): Promise<string> => {
-  const { publicKey } = useAuthStore.getState()
-  if (!publicKey) {
-    throw new Error('No hay wallet conectada')
-  }
-
-  try {
-    // Mock para desarrollo - en producción usar SDK real
-    // TODO: Implementar compra real cuando el contrato esté deployado
-    console.log('Simulando purchase_dataset (mock):', datasetId)
-    return 'mock_tx_hash_' + Date.now()
-  } catch (error) {
-    console.error('Error comprando dataset:', error)
-    throw error
-  }
+  // Re-export from the new blockchain service
+  const { purchaseDataset: purchase } = await import('@/lib/blockchain/datasets')
+  const result = await purchase(datasetId)
+  return result.hash
 }
 

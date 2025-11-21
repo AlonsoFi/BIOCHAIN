@@ -116,11 +116,42 @@ router.post('/:id/purchase', async (req, res) => {
       usdcAmount,
     })
     
-    // 4. Soroban Contract (mock):
+    // 4. Purchase on-chain (Soroban Contract)
     //    - Verifies payment
     //    - Registers purchase
     //    - Executes revenue split: 85% contributors, 15% BioChain
     //    - Sends USDC to contributors
+    let txHash: string
+    let purchaseResult: any = null
+    
+    try {
+      // Try to purchase on-chain
+      const { purchaseDatasetOnChain } = await import('../services/soroban.service.js')
+      purchaseResult = await purchaseDatasetOnChain({
+        datasetId,
+        buyerAddress: walletAddress,
+        // secretKey: req.body.secretKey, // Optional, for signing
+      })
+      txHash = purchaseResult.transactionHash
+      
+      logger.info('Dataset purchased on-chain', {
+        transactionHash: txHash,
+        datasetId,
+        priceUsdc: purchaseResult.priceUsdc,
+      })
+    } catch (error: any) {
+      // If on-chain purchase fails, fallback to mock
+      logger.warn('On-chain purchase failed, using mock', {
+        error: error.message,
+        datasetId,
+      })
+      txHash = `mock_tx_${Date.now()}`
+    }
+    
+    // 5. Generate access token
+    const accessToken = `access_token_${crypto.randomBytes(16).toString('hex')}`
+    
+    // Calculate revenue split (for logging)
     const contributorAmount = usdcAmount * 0.85
     const biochainAmount = usdcAmount * 0.15
     logger.info('Revenue split executed', {
@@ -128,10 +159,6 @@ router.post('/:id/purchase', async (req, res) => {
       contributorAmount,
       biochainAmount,
     })
-    
-    // 5. Generate access token
-    const txHash = `mock_tx_${Date.now()}`
-    const accessToken = `access_token_${crypto.randomBytes(16).toString('hex')}`
 
     logger.info('Dataset purchase completed', {
       datasetId,

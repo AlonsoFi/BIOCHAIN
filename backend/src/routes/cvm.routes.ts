@@ -1,10 +1,8 @@
 import express from 'express'
 import multer from 'multer'
-import { processPDF, getCVMConfig } from '../services/cvm.service.js'
-import { generateZKProof } from '../services/zk-prover/index.js'
-import { registerHash } from '../services/deduplication.service.js'
-import { assertNotDuplicate } from '../services/study-duplicate.service.js'
+import { processStudy } from '../services/studyPipeline.service.js'
 import { DuplicateStudyError } from '../errors/DuplicateStudyError.js'
+import { WalletAddressSchema, validateHeader } from '../utils/validation.js'
 import logger from '../utils/logger.js'
 
 const router = express.Router()
@@ -27,113 +25,79 @@ const upload = multer({
 
 /**
  * POST /api/cvm/process
- * Procesa archivo en CVM (NVIDIA TEE) con anti-duplicado
+ * Procesa archivo en CVM (NVIDIA TEE) con pipeline completo
  * 
- * Flujo:
+ * Pipeline completo:
  * 1. Recibe PDF cifrado
  * 2. Procesa en CVM (REAL o MOCK según configuración)
  * 3. Verifica duplicado (hash ya existe)
  * 4. Genera ZK proof
- * 5. Devuelve hash, metadata, attestation, zk_proof
+ * 5. Retorna objeto final listo para Soroban
  * 
  * IMPORTANTE: 
  * - El archivo NO se guarda, solo se procesa
  * - PII nunca sale del TEE
  * - Duplicados son rechazados
+ * - Buffers se destruyen inmediatamente
  */
 router.post('/process', upload.single('file'), async (req, res, next) => {
-  let pdfBuffer: Buffer | null = null
-
   try {
+    // Validar archivo
     if (!req.file) {
       logger.warn('File upload attempt without file')
       return res.status(400).json({ error: 'No file provided' })
     }
 
-    pdfBuffer = req.file.buffer
+    // Validar wallet address (contributor)
+    let contributorAddress: string
+    try {
+      contributorAddress = validateHeader(WalletAddressSchema)(
+        req.headers['x-wallet-address'] as string
+      )
+    } catch (error: any) {
+      logger.warn('Invalid or missing wallet address', {
+        error: error.message,
+      })
+      return res.status(400).json({ 
+        error: 'Wallet address required',
+        message: 'x-wallet-address header is required and must be a valid Stellar address',
+      })
+    }
 
-    logger.info('Processing file in CVM', {
+    logger.info('Starting study upload', {
       filename: req.file.originalname,
       size: req.file.size,
       mimetype: req.file.mimetype,
+      contributorAddress: contributorAddress.substring(0, 8) + '...',
     })
 
-    // 1. Procesar en CVM (REAL o MOCK según CVM_MODE)
-    const cvmConfig = getCVMConfig()
+    // Ejecutar pipeline completo
+    const result = await processStudy({
+      encryptedPDFBuffer: req.file.buffer,
+      contributorAddress,
+      filename: req.file.originalname,
+    })
+
+    logger.info('Study processing completed successfully', {
+      datasetHash: result.datasetHash.substring(0, 16) + '...',
+      contributorAddress: contributorAddress.substring(0, 8) + '...',
+    })
+
+    // Optionally register on-chain immediately
+    // For now, we return the result and let the frontend call the register endpoint
+    // In production, you might want to register automatically here
     
-    // Crear copia del buffer para CVM (el original se destruirá después)
-    const bufferCopy = Buffer.from(pdfBuffer)
-
-    const cvmResult = await processPDF({
-      encryptedPDFBuffer: bufferCopy,
-      config: cvmConfig,
-    })
-
-    logger.info('CVM processing completed', {
-      datasetHash: cvmResult.datasetHash.substring(0, 16) + '...',
-      mode: cvmResult.mode,
-      fallbackUsed: cvmResult.fallbackUsed || false,
-    })
-
-    // 2. Verificar duplicado (ANTI-DUPLICADO - Paso B y C)
-    // IMPORTANTE: Esto debe ejecutarse ANTES de generar ZK proof y registrar en blockchain
-    try {
-      await assertNotDuplicate(cvmResult.datasetHash)
-    } catch (error) {
-      // Si es DuplicateStudyError, destruir buffer y retornar error
-      if (error instanceof DuplicateStudyError) {
-        pdfBuffer.fill(0)
-        throw error // Será manejado por el error handler
-      }
-      // Re-lanzar otros errores
-      throw error
-    }
-
-    // 3. Generar ZK proof (solo si no es duplicado)
-    // IMPORTANTE: Solo pasamos dataset_hash y attestation_proof
-    // NO contributor_id, NO timestamps, NO PII, NO metadata
-    const zkProof = await generateZKProof({
-      datasetHash: cvmResult.datasetHash,
-      attestationProof: cvmResult.attestationProof,
-    })
-
-    logger.info('ZK proof generated', {
-      proofLength: zkProof.proof.length,
-      publicInputsCount: zkProof.publicInputs.length,
-    })
-
-    // 4. Registrar hash (después de verificar que no es duplicado)
-    registerHash(cvmResult.datasetHash)
-
-    // 5. Destruir buffer original (sobreescribir con ceros)
-    pdfBuffer.fill(0)
-    pdfBuffer = null
-
-    // Retornar resultado al frontend
-    // IMPORTANTE: NO incluir PII, solo datos anonimizados
-    res.json({
-      datasetHash: cvmResult.datasetHash,
-      summaryMetadata: cvmResult.summaryMetadata,
-      attestationProof: cvmResult.attestationProof,
-      zkProof: zkProof.proof,
-      publicInputs: zkProof.publicInputs,
-      duplicateCheck: 'passed',
-    })
+    // Retornar objeto final listo para Soroban
+    res.json(result)
   } catch (error: any) {
-    // Destruir buffer en caso de error
-    if (pdfBuffer) {
-      pdfBuffer.fill(0)
-    }
-
     // DuplicateStudyError será manejado por el error handler middleware
     if (error instanceof DuplicateStudyError) {
-      // Pasar al siguiente middleware (error handler)
       return next(error)
     }
 
     // Manejar errores específicos de CVM
     if (error.code === 'TIMEOUT' || error.code === 'QUOTA' || error.code === 'NETWORK_ERROR') {
-      logger.error('CVM error', {
+      logger.error('CVM error in pipeline', {
         code: error.code,
         message: error.message,
         fallbackAvailable: error.fallbackAvailable,
@@ -150,6 +114,12 @@ router.post('/process', upload.single('file'), async (req, res, next) => {
     }
 
     // Pasar otros errores al error handler
+    logger.error('Error in study processing pipeline', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+    })
+
     next(error)
   }
 })

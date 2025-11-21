@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getDatasets, purchaseDataset } from '@/lib/api/datasetsApi'
+import { getDatasets } from '@/lib/api/datasetsApi'
+import { purchaseDataset } from '@/lib/blockchain/datasets'
 import type { Dataset } from '@/lib/api/datasetsApi'
-import { ShoppingCart, DollarSign } from 'lucide-react'
+import { ShoppingCart, DollarSign, Loader2, CheckCircle2 } from 'lucide-react'
 import Badge from '@/components/ui/Badge'
 
 export default function Marketplace() {
@@ -30,12 +31,29 @@ export default function Marketplace() {
   const handlePurchase = async (datasetId: string) => {
     setPurchasing(datasetId)
     try {
-      const { txHash } = await purchaseDataset(datasetId)
-      alert(`¡Dataset comprado exitosamente! TX: ${txHash}`)
+      console.log('🟣 Starting dataset purchase from marketplace...', { datasetId })
+      
+      // Call blockchain purchase function
+      const result = await purchaseDataset(datasetId)
+      
+      console.log('📄 FULL DATASET PURCHASE EVENT LOG:', result)
+      
+      // Log all events for developer debugging
+      if (result.events && result.events.length > 0) {
+        console.log('📣 All Events:', result.events)
+        result.events.forEach((evt, idx) => {
+          console.log(`📣 EVENT [${idx}]:`, evt)
+        })
+      }
+      
+      // User-friendly success message (simple, no blockchain jargon)
+      alert('✅ ¡Dataset comprado exitosamente!\n\nYa puedes acceder a todos los datos del dataset.')
       navigate(`/researcher/dataset/${datasetId}`)
-    } catch (error) {
-      console.error('Error comprando dataset:', error)
-      alert('Error al comprar el dataset. Intenta de nuevo.')
+    } catch (error: any) {
+      console.error('❌ Purchase error:', error)
+      
+      // User-friendly error message (simple)
+      alert('Error al procesar la compra. Por favor, intenta de nuevo.')
     } finally {
       setPurchasing(null)
     }

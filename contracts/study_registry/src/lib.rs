@@ -1,169 +1,201 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, Env, Symbol, Map, Address, 
-    String as SorobanString, Bytes, BytesN
+    contract, contractimpl, contracttype, symbol_short, Env, Address, 
+    Bytes, BytesN,
 };
 
-const STUDY_RECORD: Symbol = symbol_short!("STUDY_REC");
-const DATASET_HASHES: Symbol = symbol_short!("DATASET_H");
+/// StudyRecord struct
+/// 
+/// Stores essential study information on-chain:
+/// - dataset_hash: Unique hash of the processed dataset
+/// - contributor: Address of the study contributor
+/// - timestamp: Ledger timestamp when the study was registered
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StudyRecord {
+    pub dataset_hash: BytesN<32>,
+    pub contributor: Address,
+    pub timestamp: u64,
+}
+
+/// Error types for the contract
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    DuplicateStudy,
+    InvalidAttestation,
+    InvalidZKProof,
+    StudyNotFound,
+}
 
 #[contract]
 pub struct StudyRegistry;
 
 #[contractimpl]
 impl StudyRegistry {
-    /// Registra un estudio médico
+    /// Register a medical study on-chain
     /// 
-    /// Valida:
-    /// - ZK proof: Verifica que el estudio es válido sin revelar contenido
-    /// - Attestation: Verifica que fue procesado en NVIDIA TEE
-    /// - Uniqueness: Verifica que dataset_hash no existe (anti-duplicado)
+    /// This function validates and stores a study record after processing through:
+    /// 1. NVIDIA CVM (TEE) - attestation proof
+    /// 2. ZK-Prover - zero-knowledge proof
     /// 
-    /// IMPORTANTE:
-    /// - NO incluye cycle_timestamp (regla de "uno por mes" eliminada)
-    /// - NO incluye contributor_id en validación ZK
-    /// - NO almacena PII
-    /// - Solo almacena: study_id, dataset_hash, contributor_address
+    /// Requirements:
+    /// - attestation must be non-empty (TEE attestation proof)
+    /// - zk_proof must be non-empty (ZK proof of validity)
+    /// - dataset_hash must be unique (no duplicates allowed)
     /// 
-    /// Parámetros:
-    /// - dataset_hash: Hash del dataset procesado (BytesN<32>)
-    /// - attestation: Attestation proof del CVM (NVIDIA TEE)
-    /// - zk_proof: Zero-Knowledge proof del estudio
-    /// - contributor: Dirección del contribuyente (Address)
+    /// Storage:
+    /// - Key: dataset_hash (BytesN<32>)
+    /// - Value: StudyRecord { dataset_hash, contributor, timestamp }
     /// 
-    /// Retorna: study_id único
+    /// Events:
+    /// - Emits StudyRegistered event with dataset_hash, contributor, timestamp
+    /// 
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `dataset_hash` - SHA256 hash of the processed dataset (32 bytes)
+    /// * `attestation` - TEE attestation proof from NVIDIA CVM
+    /// * `zk_proof` - Zero-knowledge proof of study validity
+    /// * `contributor` - Address of the study contributor
+    /// 
+    /// # Returns
+    /// * `Ok(())` if successful
+    /// * `Err(Error)` if validation fails
     pub fn register_study(
         env: Env,
         dataset_hash: BytesN<32>,
         attestation: Bytes,
         zk_proof: Bytes,
         contributor: Address,
-    ) -> Result<SorobanString, SorobanString> {
+    ) -> Result<(), Error> {
         // ============================================
-        // 1. VERIFICAR UNIQUENESS (Anti-duplicado)
+        // 1. CHECK UNIQUENESS (Prevent duplicates)
         // ============================================
         if Self::dataset_exists(&env, &dataset_hash) {
-            return Err(SorobanString::from_str(&env, "Duplicate study: dataset_hash already registered"));
+            return Err(Error::DuplicateStudy);
         }
 
         // ============================================
-        // 2. VERIFICAR ATTESTATION (TEE Proof)
+        // 2. VALIDATE ATTESTATION (TEE Proof)
         // ============================================
-        // TODO: En producción, verificaría la attestation del TEE
-        // Por ahora, mock: verificar que attestation no está vacío
+        // Verify attestation is present and non-empty
+        // In production, this would verify the cryptographic signature
+        // from the NVIDIA TEE attestation service
         if attestation.len() == 0 {
-            return Err(SorobanString::from_str(&env, "Invalid attestation: empty"));
+            return Err(Error::InvalidAttestation);
         }
 
         // ============================================
-        // 3. VERIFICAR ZK PROOF
+        // 3. VALIDATE ZK PROOF
         // ============================================
-        // TODO: En producción, verificaría la proof con RISC Zero verifier
-        // Por ahora, mock: verificar que zk_proof no está vacío
+        // Verify zk_proof is present and non-empty
+        // In production, this would verify the proof using RISC Zero verifier
+        // or a custom SNARK verifier (BN254 curve)
         if zk_proof.len() == 0 {
-            return Err(SorobanString::from_str(&env, "Invalid ZK proof: empty"));
+            return Err(Error::InvalidZKProof);
         }
 
-        // Mock verification: En producción usaría RISC Zero verifier
-        // verify_zk_proof(zk_proof, dataset_hash, attestation)
-        if !Self::verify_zk_proof_mock(&env, &zk_proof, &dataset_hash, &attestation) {
-            return Err(SorobanString::from_str(&env, "ZK proof verification failed"));
+        // Mock verification: In production, this would:
+        // 1. Deserialize the ZK proof
+        // 2. Verify with RISC Zero verifier or SNARK verifier
+        // 3. Validate public inputs (dataset_hash, attestation)
+        // 4. Ensure proof certifies:
+        //    - Processing in TEE
+        //    - No PII in dataset
+        //    - Valid dataset_hash
+        if !Self::verify_zk_proof_mock(&zk_proof, &dataset_hash, &attestation) {
+            return Err(Error::InvalidZKProof);
         }
 
         // ============================================
-        // 4. GENERAR study_id ÚNICO
+        // 4. GET LEDGER TIMESTAMP
         // ============================================
-        // study_id = hash(dataset_hash + contributor + counter)
+        let timestamp = env.ledger().timestamp();
+
+        // ============================================
+        // 5. CREATE StudyRecord
+        // ============================================
+        let study_record = StudyRecord {
+            dataset_hash: dataset_hash.clone(),
+            contributor: contributor.clone(),
+            timestamp,
+        };
+
+        // ============================================
+        // 6. STORE StudyRecord
+        // ============================================
+        // Use dataset_hash as the key for direct lookup
+        // This ensures uniqueness and efficient access
         let storage = env.storage().instance();
-        let counter: u64 = storage.get(&symbol_short!("counter")).unwrap_or(0u64);
-        counter += 1;
-        storage.set(&symbol_short!("counter"), &counter);
-
-        let study_id = SorobanString::from_str(&env, &format!("study_{}", counter));
+        storage.set(&dataset_hash, &study_record);
 
         // ============================================
-        // 5. CREAR StudyRecord
+        // 7. EMIT EVENT
         // ============================================
-        // IMPORTANTE: Solo almacenamos:
-        // - study_id
-        // - dataset_hash
-        // - contributor_address
-        // NO timestamps, NO PII, NO metadata
-        let study_record = (
-            study_id.clone(),
-            dataset_hash.clone(),
-            contributor.clone(),
-        );
-
-        // Guardar estudio
-        let mut studies: Map<SorobanString, (BytesN<32>, Address)> = 
-            storage.get(&STUDY_RECORD).unwrap_or(Map::new(&env));
-        studies.set(study_id.clone(), study_record);
-        storage.set(&STUDY_RECORD, &studies);
-
-        // ============================================
-        // 6. REGISTRAR dataset_hash (para uniqueness check)
-        // ============================================
-        let mut dataset_hashes: Map<BytesN<32>, bool> = 
-            storage.get(&DATASET_HASHES).unwrap_or(Map::new(&env));
-        dataset_hashes.set(dataset_hash.clone(), true);
-        storage.set(&DATASET_HASHES, &dataset_hashes);
-
-        // ============================================
-        // 7. EMITIR EVENTO
-        // ============================================
+        // Emit StudyRegistered event for indexing and monitoring
+        // Event structure: (event_name, (dataset_hash, contributor, timestamp))
         env.events().publish(
-            (symbol_short!("study"), symbol_short!("registered")),
-            (study_id.clone(), contributor, dataset_hash),
+            (symbol_short!("StudyRegistered"),),
+            (dataset_hash.clone(), contributor.clone(), timestamp),
         );
 
-        Ok(study_id)
+        Ok(())
     }
 
-    /// Verifica si un dataset_hash ya existe (anti-duplicado)
+    /// Check if a dataset_hash already exists (uniqueness check)
+    /// 
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `dataset_hash` - The dataset hash to check
+    /// 
+    /// # Returns
+    /// * `true` if the dataset_hash exists, `false` otherwise
     pub fn dataset_exists(env: &Env, dataset_hash: &BytesN<32>) -> bool {
         let storage = env.storage().instance();
-        let dataset_hashes: Map<BytesN<32>, bool> = 
-            storage.get(&DATASET_HASHES).unwrap_or(Map::new(env));
-        dataset_hashes.get(dataset_hash.clone()).is_some()
+        storage.has(&dataset_hash)
     }
 
-    /// Obtiene un estudio por ID
+    /// Get a study record by dataset_hash
+    /// 
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `dataset_hash` - The dataset hash to lookup
+    /// 
+    /// # Returns
+    /// * `Ok(StudyRecord)` if found
+    /// * `Err(Error::StudyNotFound)` if not found
     pub fn get_study(
         env: Env,
-        study_id: SorobanString,
-    ) -> Result<(BytesN<32>, Address), SorobanString> {
+        dataset_hash: BytesN<32>,
+    ) -> Result<StudyRecord, Error> {
         let storage = env.storage().instance();
-        let studies: Map<SorobanString, (BytesN<32>, Address)> = 
-            storage.get(&STUDY_RECORD).unwrap_or(Map::new(&env));
-        
-        studies.get(study_id.clone())
-            .ok_or(SorobanString::from_str(&env, "Study not found"))
+        storage.get(&dataset_hash)
+            .ok_or(Error::StudyNotFound)
     }
 
-    /// Verifica ZK proof (mock implementation)
+    /// Verify ZK proof (mock implementation)
     /// 
-    /// TODO: En producción, usar RISC Zero verifier
-    /// Verifica que:
-    /// - La proof es válida
-    /// - Los public inputs (dataset_hash, attestation) coinciden
-    /// - La proof certifica procesamiento en TEE sin PII
+    /// In production, this would:
+    /// 1. Deserialize the ZK proof
+    /// 2. Call RISC Zero verifier or SNARK verifier (BN254)
+    /// 3. Validate public inputs match (dataset_hash, attestation)
+    /// 4. Verify proof structure and cryptographic validity
+    /// 
+    /// # Arguments
+    /// * `zk_proof` - The zero-knowledge proof to verify
+    /// * `dataset_hash` - The dataset hash (public input)
+    /// * `attestation` - The TEE attestation (public input)
+    /// 
+    /// # Returns
+    /// * `true` if proof is valid (mock: checks non-empty and structure)
+    /// * `false` otherwise
     fn verify_zk_proof_mock(
-        _env: &Env,
         zk_proof: &Bytes,
         dataset_hash: &BytesN<32>,
         attestation: &Bytes,
     ) -> bool {
-        // Mock: Verificar estructura básica
-        // En producción, esto sería:
-        // 1. Deserializar la proof
-        // 2. Verificar con RISC Zero verifier
-        // 3. Validar public inputs (dataset_hash, attestation)
-        // 4. Validar que la proof certifica:
-        //    - Procesamiento en TEE
-        //    - Sin PII
-        //    - Hash válido
-        
+        // Mock verification: Check basic structure
+        // In production, this would perform full cryptographic verification
         zk_proof.len() > 0 && 
         dataset_hash.len() == 32 && 
         attestation.len() > 0

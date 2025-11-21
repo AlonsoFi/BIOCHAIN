@@ -5,6 +5,8 @@ import userRoutes from './routes/user.routes.js'
 import cvmRoutes from './routes/cvm.routes.js'
 import datasetsRoutes from './routes/datasets.routes.js'
 import studiesRoutes from './routes/studies.routes.js'
+import contributorRoutes from './routes/contributor.routes.js'
+import sorobanRoutes from './routes/soroban.routes.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import logger from './utils/logger.js'
 
@@ -32,6 +34,8 @@ app.use('/api/user', userRoutes)
 app.use('/api/cvm', cvmRoutes)
 app.use('/api/datasets', datasetsRoutes)
 app.use('/api/studies', studiesRoutes)
+app.use('/api/contributor', contributorRoutes)
+app.use('/api/soroban', sorobanRoutes)
 
 // Health check
 app.get('/health', (req, res) => {
